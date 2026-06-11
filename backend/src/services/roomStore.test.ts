@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRoom, joinRoom, startRoom } from "./roomStore.js";
+import { createRoom, getRoom, joinRoom, startRoom, toRoomSnapshot } from "./roomStore.js";
 
 describe("roomStore", () => {
   it("createRoom returns a room with a 4-character uppercase code", () => {
@@ -56,6 +56,47 @@ describe("roomStore", () => {
       expect(snapshot.status).toBe("active");
       expect(snapshot.hostId).toBe(participantId);
       expect(snapshot.participants).toHaveLength(2);
+    });
+
+    it("sets drawerId to the first participant's id (index 0)", () => {
+      const { room, participantId } = createRoom("Alice");
+      joinRoom(room.code, "Bob");
+      const result = startRoom(room.code, participantId) as { snapshot: { drawerId?: string } };
+
+      expect(result.snapshot.drawerId).toBe(participantId);
+    });
+
+    it("sets secretWord to 'rocket' (STARTER_WORDS[0])", () => {
+      const { room, participantId } = createRoom("Alice");
+      joinRoom(room.code, "Bob");
+      const result = startRoom(room.code, participantId) as { snapshot: { secretWord?: string } };
+
+      expect(result.snapshot.secretWord).toBe("rocket");
+    });
+  });
+
+  describe("toRoomSnapshot word visibility", () => {
+    it("includes secretWord in the snapshot for the drawer", () => {
+      const { room, participantId } = createRoom("Alice");
+      joinRoom(room.code, "Bob");
+      startRoom(room.code, participantId);
+
+      const activeRoom = getRoom(room.code)!;
+      const snapshot = toRoomSnapshot(activeRoom, participantId);
+
+      expect(snapshot.secretWord).toBe("rocket");
+    });
+
+    it("omits secretWord from the snapshot for a non-drawer participant", () => {
+      const { room, participantId } = createRoom("Alice");
+      const bob = joinRoom(room.code, "Bob")!;
+      startRoom(room.code, participantId);
+
+      const activeRoom = getRoom(room.code)!;
+      const snapshot = toRoomSnapshot(activeRoom, bob.participantId);
+
+      expect(snapshot.secretWord).toBeUndefined();
+      expect(snapshot.drawerId).toBe(participantId);
     });
   });
 });

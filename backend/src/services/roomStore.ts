@@ -113,17 +113,21 @@ export function startRoom(code: string, participantId: string) {
   }
 
   room.status = "active";
+  room.drawerId = room.participants[0].id;
+  room.secretWord = STARTER_WORDS[0];
   saveRoom(room);
 
-  return { snapshot: toRoomSnapshot(getRoom(code)!) };
+  return { snapshot: toRoomSnapshot(getRoom(code)!, participantId) };
 }
 
 export function toRoomSnapshot(room: Room, viewerParticipantId?: string): RoomSnapshot {
-  void viewerParticipantId;
+  const isDrawer = viewerParticipantId !== undefined && viewerParticipantId === room.drawerId;
 
   return {
     code: room.code,
     hostId: room.hostId,
+    ...(room.drawerId !== undefined && { drawerId: room.drawerId }),
+    ...(isDrawer && room.secretWord !== undefined && { secretWord: room.secretWord }),
     status: room.status,
     participants: room.participants.map((participant) => ({ ...participant })),
     availableWords: listWords(),
