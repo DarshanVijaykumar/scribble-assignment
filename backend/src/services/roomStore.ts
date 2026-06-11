@@ -53,6 +53,7 @@ export function createRoom(playerName?: string) {
   const participant = createParticipant(playerName);
   const room: Room = {
     code: generateUniqueCode(),
+    hostId: participant.id,
     status: "lobby",
     participants: [participant],
     createdAt: now(),
@@ -68,7 +69,7 @@ export function createRoom(playerName?: string) {
 }
 
 export function joinRoom(code: string, playerName?: string) {
-  const room = rooms.get(code);
+  const room = rooms.get(code.trim());
 
   if (!room) {
     return null;
@@ -96,11 +97,33 @@ export function saveRoom(room: Room) {
   return getRoom(room.code);
 }
 
+export function startRoom(code: string, participantId: string) {
+  const room = rooms.get(code);
+
+  if (!room) {
+    return null;
+  }
+
+  if (participantId !== room.hostId) {
+    return { error: "forbidden" as const };
+  }
+
+  if (room.participants.length < 2) {
+    return { error: "conflict" as const };
+  }
+
+  room.status = "active";
+  saveRoom(room);
+
+  return { snapshot: toRoomSnapshot(getRoom(code)!) };
+}
+
 export function toRoomSnapshot(room: Room, viewerParticipantId?: string): RoomSnapshot {
   void viewerParticipantId;
 
   return {
     code: room.code,
+    hostId: room.hostId,
     status: room.status,
     participants: room.participants.map((participant) => ({ ...participant })),
     availableWords: listWords(),
