@@ -1,8 +1,26 @@
 export type ParticipantRole = "drawer" | "guesser";
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Stroke {
+  points: Point[];
+}
+
+export interface GuessEntry {
+  participantId: string;
+  participantName: string;
+  text: string;
+  correct: boolean;
+  timestamp: string;
+}
+
 export interface Participant {
   id: string;
   name: string;
+  score: number;
   joinedAt: string;
 }
 
@@ -13,6 +31,8 @@ export interface RoomSnapshot {
   secretWord?: string;
   status: "lobby" | "active";
   participants: Participant[];
+  strokes: Stroke[];
+  guesses: GuessEntry[];
   availableWords: string[];
   roles: ParticipantRole[];
 }
@@ -66,5 +86,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ participantId })
     });
+  },
+  addStroke(code: string, participantId: string, points: Point[]) {
+    return request<{ ok: boolean }>(`/rooms/${encodeURIComponent(code)}/strokes`, {
+      method: "POST",
+      body: JSON.stringify({ participantId, points })
+    });
+  },
+  clearStrokes(code: string, participantId: string) {
+    return request<{ ok: boolean }>(`/rooms/${encodeURIComponent(code)}/strokes`, {
+      method: "DELETE",
+      body: JSON.stringify({ participantId })
+    });
+  },
+  submitGuess(code: string, participantId: string, guess: string) {
+    return request<{ correct: boolean; score: number }>(
+      `/rooms/${encodeURIComponent(code)}/guesses`,
+      {
+        method: "POST",
+        body: JSON.stringify({ participantId, guess })
+      }
+    );
   }
 };

@@ -1,21 +1,49 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../components/Card";
+import { DrawingCanvas } from "../components/DrawingCanvas";
 import { GuessForm } from "../components/GuessForm";
 import { ResultPanel } from "../components/ResultPanel";
 import { RoomCodeBadge } from "../components/RoomCodeBadge";
 import { Scoreboard } from "../components/Scoreboard";
+import { type RoomSnapshot, type Stroke, api } from "../services/api";
 import { useRoomState } from "../state/roomStore";
+
+const POLL_INTERVAL_MS = 2000;
 
 export function GamePage() {
   const navigate = useNavigate();
-  const { room, participantId } = useRoomState();
+  const { room: initialRoom, participantId } = useRoomState();
+  const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(initialRoom);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!room) {
+    if (!initialRoom) {
       navigate("/", { replace: true });
+      return;
     }
-  }, [navigate, room]);
+    setSnapshot(initialRoom);
+  }, [navigate, initialRoom]);
+
+  const poll = useCallback(async () => {
+    if (!initialRoom || !participantId) return;
+    try {
+      const result = await api.fetchRoom(initialRoom.code, participantId);
+      setSnapshot(result.room);
+    } catch {
+      // retain previous snapshot on transient error
+    }
+  }, [initialRoom, participantId]);
+
+  useEffect(() => {
+    if (!initialRoom) return;
+    intervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    };
+  }, [poll, initialRoom]);
+
+  const room = snapshot ?? initialRoom;
 
   if (!room) {
     return null;
@@ -23,6 +51,40 @@ export function GamePage() {
 
   const isDrawer = participantId !== null && participantId === room.drawerId;
   const role = isDrawer ? "Drawer" : "Guesser";
+  const roomCode = room.code;
+
+  async function handleNewStroke(stroke: Stroke) {
+    if (!participantId) return;
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+      return { ...prev, strokes: [...prev.strokes, stroke] };
+    });
+    try {
+      await api.addStroke(roomCode, participantId, stroke.points);
+    } catch {
+      // stroke will re-sync on next poll
+    }
+  }
+
+  async function handleClear() {
+    if (!participantId) return;
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+      return { ...prev, strokes: [] };
+    });
+    try {
+      await api.clearStrokes(roomCode, participantId);
+    } catch {
+      // will re-sync on next poll
+    }
+  }
+
+  async function handleGuessSubmit(guess: string) {
+    if (!participantId) return null;
+    const result = await api.submitGuess(roomCode, participantId, guess);
+    await poll();
+    return result;
+  }
 
   return (
     <section className="panel game-page">
@@ -36,15 +98,18 @@ export function GamePage() {
 
       <div className="game-page__layout">
         <aside className="game-page__sidebar game-page__sidebar--left">
-          <Scoreboard />
-          <ResultPanel />
+          <Scoreboard participants={room.participants} />
+          <ResultPanel guesses={room.guesses} />
         </aside>
 
         <div className="game-page__main">
           <Card title="Canvas">
-            <div className="canvas-placeholder" style={{ minHeight: '500px', backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}>
-              Waiting for drawer...
-            </div>
+            <DrawingCanvas
+              strokes={room.strokes}
+              isDrawer={isDrawer}
+              onNewStroke={handleNewStroke}
+              onClear={handleClear}
+            />
           </Card>
         </div>
 
@@ -79,9 +144,11 @@ export function GamePage() {
             </ul>
           </Card>
 
-          <Card title="Your Guess">
-            <GuessForm />
-          </Card>
+          {!isDrawer && (
+            <Card title="Your Guess">
+              <GuessForm onSubmit={handleGuessSubmit} />
+            </Card>
+          )}
         </aside>
       </div>
 

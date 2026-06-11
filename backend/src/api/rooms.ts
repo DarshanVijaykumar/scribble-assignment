@@ -1,13 +1,25 @@
 import { Router } from "express";
 import {
+  addStrokeSchema,
+  clearStrokesSchema,
   createRoomSchema,
   HttpError,
   joinRoomSchema,
   roomCodeParamsSchema,
   roomViewerQuerySchema,
-  startRoomSchema
+  startRoomSchema,
+  submitGuessSchema
 } from "./schemas.js";
-import { createRoom, getRoom, joinRoom, startRoom, toRoomSnapshot } from "../services/roomStore.js";
+import {
+  addStroke,
+  clearStrokes,
+  createRoom,
+  getRoom,
+  joinRoom,
+  startRoom,
+  submitGuess,
+  toRoomSnapshot
+} from "../services/roomStore.js";
 
 export function createRoomsRouter() {
   const router = Router();
@@ -81,6 +93,73 @@ export function createRoomsRouter() {
       }
 
       response.json({ room: result.snapshot });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:code/strokes", (request, response, next) => {
+    try {
+      const { code } = roomCodeParamsSchema.parse(request.params);
+      const { participantId, points } = addStrokeSchema.parse(request.body);
+      const room = getRoom(code.toUpperCase());
+
+      if (!room) throw new HttpError(404, "Room not found");
+      if (room.status !== "active") throw new HttpError(400, "Game is not active");
+
+      const participant = room.participants.find((p) => p.id === participantId);
+      if (!participant) throw new HttpError(404, "Participant not found");
+      if (participantId !== room.drawerId) throw new HttpError(403, "Only the drawer can add strokes");
+
+      addStroke(code.toUpperCase(), { points });
+      response.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/:code/strokes", (request, response, next) => {
+    try {
+      const { code } = roomCodeParamsSchema.parse(request.params);
+      const { participantId } = clearStrokesSchema.parse(request.body);
+      const room = getRoom(code.toUpperCase());
+
+      if (!room) throw new HttpError(404, "Room not found");
+      if (room.status !== "active") throw new HttpError(400, "Game is not active");
+
+      const participant = room.participants.find((p) => p.id === participantId);
+      if (!participant) throw new HttpError(404, "Participant not found");
+      if (participantId !== room.drawerId) throw new HttpError(403, "Only the drawer can clear strokes");
+
+      clearStrokes(code.toUpperCase());
+      response.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:code/guesses", (request, response, next) => {
+    try {
+      const { code } = roomCodeParamsSchema.parse(request.params);
+      const { participantId, guess } = submitGuessSchema.parse(request.body);
+      const room = getRoom(code.toUpperCase());
+
+      if (!room) throw new HttpError(404, "Room not found");
+      if (room.status !== "active") throw new HttpError(400, "Game is not active");
+
+      const trimmed = guess.trim();
+      if (trimmed.length === 0) throw new HttpError(400, "Guess cannot be empty");
+
+      const result = submitGuess(code.toUpperCase(), participantId, trimmed);
+
+      if (result === null) throw new HttpError(404, "Room not found");
+      if ("error" in result) {
+        if (result.error === "forbidden") throw new HttpError(403, "The drawer cannot submit guesses");
+        if (result.error === "notFound") throw new HttpError(404, "Participant not found");
+        if (result.error === "emptyGuess") throw new HttpError(400, "Guess cannot be empty");
+      }
+
+      response.json(result);
     } catch (error) {
       next(error);
     }

@@ -1,9 +1,27 @@
 export type ParticipantRole = "drawer" | "guesser";
 export type RoomStatus = "lobby" | "active";
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Stroke {
+  points: Point[];
+}
+
+export interface GuessEntry {
+  participantId: string;
+  participantName: string;
+  text: string;
+  correct: boolean;
+  timestamp: string;
+}
+
 export interface Participant {
   id: string;
   name: string;
+  score: number;
   joinedAt: string;
 }
 
@@ -14,6 +32,8 @@ export interface Room {
   secretWord?: string;
   status: RoomStatus;
   participants: Participant[];
+  strokes: Stroke[];
+  guesses: GuessEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +45,8 @@ export interface RoomSnapshot {
   secretWord?: string;
   status: RoomStatus;
   participants: Participant[];
+  strokes: Stroke[];
+  guesses: GuessEntry[];
   availableWords: string[];
   roles: ParticipantRole[];
 }

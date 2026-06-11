@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Participant, Room, RoomSnapshot } from "../models/game.js";
+import type { GuessEntry, Participant, Room, RoomSnapshot, Stroke } from "../models/game.js";
 import { STARTER_ROLES, STARTER_WORDS } from "../seed/starterData.js";
 
 const rooms = new Map<string, Room>();
@@ -37,6 +37,7 @@ function createParticipant(name?: string): Participant {
   return {
     id: randomUUID(),
     name: displayName(name),
+    score: 0,
     joinedAt: now()
   };
 }
@@ -56,6 +57,8 @@ export function createRoom(playerName?: string) {
     hostId: participant.id,
     status: "lobby",
     participants: [participant],
+    strokes: [],
+    guesses: [],
     createdAt: now(),
     updatedAt: now()
   };
@@ -115,6 +118,11 @@ export function startRoom(code: string, participantId: string) {
   room.status = "active";
   room.drawerId = room.participants[0].id;
   room.secretWord = STARTER_WORDS[0];
+  room.strokes = [];
+  room.guesses = [];
+  for (const p of room.participants) {
+    p.score = 0;
+  }
   saveRoom(room);
 
   return { snapshot: toRoomSnapshot(getRoom(code)!, participantId) };
@@ -130,7 +138,58 @@ export function toRoomSnapshot(room: Room, viewerParticipantId?: string): RoomSn
     ...(isDrawer && room.secretWord !== undefined && { secretWord: room.secretWord }),
     status: room.status,
     participants: room.participants.map((participant) => ({ ...participant })),
+    strokes: room.strokes.map((s) => ({ points: s.points.map((p) => ({ ...p })) })),
+    guesses: room.guesses.map((g) => ({ ...g })),
     availableWords: listWords(),
     roles: [...STARTER_ROLES]
   };
+}
+
+export function addStroke(code: string, stroke: Stroke) {
+  const room = rooms.get(code);
+  if (!room) return null;
+  room.strokes.push({ points: stroke.points.map((p) => ({ ...p })) });
+  room.updatedAt = now();
+  rooms.set(code, room);
+  return true;
+}
+
+export function clearStrokes(code: string) {
+  const room = rooms.get(code);
+  if (!room) return null;
+  room.strokes = [];
+  room.updatedAt = now();
+  rooms.set(code, room);
+  return true;
+}
+
+export function submitGuess(code: string, participantId: string, guessText: string) {
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  const participant = room.participants.find((p) => p.id === participantId);
+  if (!participant) return { error: "notFound" as const };
+
+  const trimmed = guessText.trim();
+  if (trimmed.length === 0) return { error: "emptyGuess" as const };
+
+  if (participantId === room.drawerId) return { error: "forbidden" as const };
+
+  const correct = trimmed.toLowerCase() === (room.secretWord ?? "").toLowerCase();
+  if (correct) {
+    participant.score += 100;
+  }
+
+  const entry: GuessEntry = {
+    participantId,
+    participantName: participant.name,
+    text: trimmed,
+    correct,
+    timestamp: now()
+  };
+  room.guesses.push(entry);
+  room.updatedAt = now();
+  rooms.set(code, room);
+
+  return { correct, score: participant.score };
 }
