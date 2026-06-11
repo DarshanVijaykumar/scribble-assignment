@@ -7,12 +7,13 @@ import { ResultPanel } from "../components/ResultPanel";
 import { RoomCodeBadge } from "../components/RoomCodeBadge";
 import { Scoreboard } from "../components/Scoreboard";
 import { type RoomSnapshot, type Stroke, api } from "../services/api";
-import { useRoomState } from "../state/roomStore";
+import { useRoomState, useRoomStore } from "../state/roomStore";
 
 const POLL_INTERVAL_MS = 2000;
 
 export function GamePage() {
   const navigate = useNavigate();
+  const roomStore = useRoomStore();
   const { room: initialRoom, participantId } = useRoomState();
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(initialRoom);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,6 +43,13 @@ export function GamePage() {
       if (intervalRef.current !== null) clearInterval(intervalRef.current);
     };
   }, [poll, initialRoom]);
+
+  useEffect(() => {
+    if (snapshot?.status === "lobby") {
+      roomStore.setRoomSnapshot(snapshot);
+      navigate("/lobby", { replace: true });
+    }
+  }, [snapshot, navigate, roomStore]);
 
   const room = snapshot ?? initialRoom;
 
@@ -84,6 +92,60 @@ export function GamePage() {
     const result = await api.submitGuess(roomCode, participantId, guess);
     await poll();
     return result;
+  }
+
+  const isHost = participantId !== null && participantId === room.hostId;
+
+  async function handlePlayAgain() {
+    try {
+      await roomStore.restartRoom();
+    } catch {
+      // error surfaced via store
+    }
+  }
+
+  if (room.status === "results") {
+    return (
+      <section className="panel game-page">
+        <div className="game-page__header">
+          <div className="game-page__header-left">
+            <span className="section-kicker">Round Over</span>
+            <h1 className="game-page__title">Results</h1>
+          </div>
+          <RoomCodeBadge code={room.code} />
+        </div>
+
+        <div className="game-page__layout">
+          <aside className="game-page__sidebar game-page__sidebar--left">
+            <Scoreboard participants={room.participants} />
+          </aside>
+
+          <div className="game-page__main">
+            <Card title="The Word Was">
+              <p style={{ fontSize: "2rem", fontWeight: "bold", textAlign: "center", padding: "1rem 0" }}>
+                {room.secretWord ?? "—"}
+              </p>
+            </Card>
+            <ResultPanel guesses={room.guesses} />
+          </div>
+
+          <aside className="game-page__sidebar game-page__sidebar--right">
+          </aside>
+        </div>
+
+        <div className="button-row">
+          {isHost ? (
+            <button className="button button--primary" onClick={handlePlayAgain}>
+              Play Again
+            </button>
+          ) : (
+            <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>
+              Waiting for the host to start a new game…
+            </p>
+          )}
+        </div>
+      </section>
+    );
   }
 
   return (

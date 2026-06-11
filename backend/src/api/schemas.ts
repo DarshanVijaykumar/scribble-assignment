@@ -31,6 +31,10 @@ export const startRoomSchema = z.object({
   participantId: z.string().min(1, "participantId is required")
 });
 
+export const restartRoomSchema = z.object({
+  participantId: z.string().min(1, "participantId is required")
+});
+
 export const roomCodeParamsSchema = z.object({
   code: z.string()
 });

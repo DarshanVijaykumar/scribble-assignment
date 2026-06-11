@@ -5,6 +5,7 @@ import {
   createRoomSchema,
   HttpError,
   joinRoomSchema,
+  restartRoomSchema,
   roomCodeParamsSchema,
   roomViewerQuerySchema,
   startRoomSchema,
@@ -16,6 +17,7 @@ import {
   createRoom,
   getRoom,
   joinRoom,
+  restartRoom,
   startRoom,
   submitGuess,
   toRoomSnapshot
@@ -90,6 +92,29 @@ export function createRoomsRouter() {
           throw new HttpError(403, "Only the host can start the game");
         }
         throw new HttpError(409, "At least 2 players are required to start the game");
+      }
+
+      response.json({ room: result.snapshot });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:code/restart", (request, response, next) => {
+    try {
+      const { code } = roomCodeParamsSchema.parse(request.params);
+      const { participantId } = restartRoomSchema.parse(request.body);
+      const result = restartRoom(code.toUpperCase(), participantId);
+
+      if (result === null) {
+        throw new HttpError(404, "Room not found");
+      }
+
+      if ("error" in result) {
+        if (result.error === "forbidden") {
+          throw new HttpError(403, "Only the host can restart the game");
+        }
+        throw new HttpError(400, "Game has not ended yet");
       }
 
       response.json({ room: result.snapshot });

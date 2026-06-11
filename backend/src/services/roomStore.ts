@@ -130,12 +130,13 @@ export function startRoom(code: string, participantId: string) {
 
 export function toRoomSnapshot(room: Room, viewerParticipantId?: string): RoomSnapshot {
   const isDrawer = viewerParticipantId !== undefined && viewerParticipantId === room.drawerId;
+  const revealWord = isDrawer || room.status === "results";
 
   return {
     code: room.code,
     hostId: room.hostId,
     ...(room.drawerId !== undefined && { drawerId: room.drawerId }),
-    ...(isDrawer && room.secretWord !== undefined && { secretWord: room.secretWord }),
+    ...(revealWord && room.secretWord !== undefined && { secretWord: room.secretWord }),
     status: room.status,
     participants: room.participants.map((participant) => ({ ...participant })),
     strokes: room.strokes.map((s) => ({ points: s.points.map((p) => ({ ...p })) })),
@@ -143,6 +144,26 @@ export function toRoomSnapshot(room: Room, viewerParticipantId?: string): RoomSn
     availableWords: listWords(),
     roles: [...STARTER_ROLES]
   };
+}
+
+export function restartRoom(code: string, participantId: string) {
+  const room = rooms.get(code);
+  if (!room) return null;
+
+  if (participantId !== room.hostId) return { error: "forbidden" as const };
+  if (room.status !== "results") return { error: "invalidStatus" as const };
+
+  room.status = "lobby";
+  room.drawerId = undefined;
+  room.secretWord = undefined;
+  room.strokes = [];
+  room.guesses = [];
+  for (const p of room.participants) {
+    p.score = 0;
+  }
+  saveRoom(room);
+
+  return { snapshot: toRoomSnapshot(getRoom(code)!, participantId) };
 }
 
 export function addStroke(code: string, stroke: Stroke) {
@@ -178,6 +199,7 @@ export function submitGuess(code: string, participantId: string, guessText: stri
   const correct = trimmed.toLowerCase() === (room.secretWord ?? "").toLowerCase();
   if (correct) {
     participant.score += 100;
+    room.status = "results";
   }
 
   const entry: GuessEntry = {

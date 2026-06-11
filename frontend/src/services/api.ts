@@ -29,7 +29,7 @@ export interface RoomSnapshot {
   hostId: string;
   drawerId?: string;
   secretWord?: string;
-  status: "lobby" | "active";
+  status: "lobby" | "active" | "results";
   participants: Participant[];
   strokes: Stroke[];
   guesses: GuessEntry[];
@@ -107,5 +107,11 @@ export const api = {
         body: JSON.stringify({ participantId, guess })
       }
     );
+  },
+  restartRoom(code: string, participantId: string) {
+    return request<{ room: RoomSnapshot }>(`/rooms/${encodeURIComponent(code)}/restart`, {
+      method: "POST",
+      body: JSON.stringify({ participantId })
+    });
   }
 };
